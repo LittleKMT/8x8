@@ -56,6 +56,16 @@ function makeBatch(): Piece[] {
   }));
 }
 
+function makeRescueBatch(): Piece[] {
+  const batch = makeBatch();
+  batch[0] = {
+    id: `${Date.now()}-rescue-${Math.random()}`,
+    cells: SHAPES[0],
+    color: Math.floor(Math.random() * PALETTE_SIZE),
+  };
+  return batch;
+}
+
 function canPlace(board: Cell[][], piece: Piece, row: number, col: number) {
   return piece.cells.every(({ r, c }) => {
     const rr = row + r;
@@ -107,7 +117,6 @@ export default function Home() {
   const [hover, setHover] = useState<Point | null>(null);
   const [drag, setDrag] = useState<DragVisual | null>(null);
   const [undo, setUndo] = useState<Snapshot | null>(null);
-  const [gameOver, setGameOver] = useState(false);
   const [sound, setSound] = useState(true);
   const [sparkles, setSparkles] = useState<string[]>([]);
   const audioRef = useRef<AudioContext | null>(null);
@@ -186,11 +195,9 @@ export default function Home() {
 
     let finalPieces = nextPieces;
     if (finalPieces.every((piece) => piece === null)) finalPieces = makeBatch();
-    setPieces(finalPieces);
     const playable = finalPieces.some((piece) => piece && pieceFits(nextBoard, piece));
-    if (!playable) {
-      setGameOver(true);
-    }
+    if (!playable) finalPieces = makeRescueBatch();
+    setPieces(finalPieces);
   }
 
   function place(index: number, row: number, col: number) {
@@ -213,11 +220,10 @@ export default function Home() {
     setSelected(null);
     setHover(null);
     setUndo(null);
-    setGameOver(false);
   }
 
   function undoMove() {
-    if (!undo || gameOver) return;
+    if (!undo) return;
     setBoard(cloneBoard(undo.board));
     setPieces(undo.pieces.map((piece) => piece ? { ...piece } : null));
     setScore(undo.score);
@@ -249,7 +255,7 @@ export default function Home() {
   }
 
   function startDrag(index: number, event: React.PointerEvent) {
-    if (!pieces[index] || gameOver) return;
+    if (!pieces[index]) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     const grid = boardRef.current;
@@ -372,20 +378,9 @@ export default function Home() {
       </section>
 
       <div className="actions">
-        <button onClick={undoMove} disabled={!undo || gameOver}>↶ 回上一步</button>
+        <button onClick={undoMove} disabled={!undo}>↶ 回上一步</button>
         <button onClick={restart}>↻ 重新開始</button>
       </div>
-
-      {gameOver && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="game-over-title">
-          <div className="game-modal">
-            <div className="celebration">🎉</div>
-            <h2 id="game-over-title">好棒的挑戰！</h2>
-            <p>這次得到</p><strong>{score} 分</strong>
-            <button onClick={restart}>再玩一次</button>
-          </div>
-        </div>
-      )}
     </main>
   );
 }
