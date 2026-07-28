@@ -17,7 +17,8 @@ type DragSession = {
 };
 type DragVisual = { index: number; pointerId: number; x: number; y: number; cellSize: number; gap: number };
 
-const SIZE = 10;
+const SIZE = 8;
+const PALETTE_SIZE = 3;
 const HIGH_SCORE_KEY = "fangkuai-leyuan-high-score";
 const DRAG_START_DISTANCE = 3;
 const DRAG_LIFT_CELLS = 2.4;
@@ -51,7 +52,7 @@ function makeBatch(): Piece[] {
   return Array.from({ length: 3 }, (_, index) => ({
     id: `${Date.now()}-${index}-${Math.random()}`,
     cells: SHAPES[Math.floor(Math.random() * SHAPES.length)],
-    color: Math.floor(Math.random() * 6),
+    color: Math.floor(Math.random() * PALETTE_SIZE),
   }));
 }
 
@@ -316,7 +317,7 @@ export default function Home() {
       </header>
 
       <section className="board-wrap">
-        <div className="board" ref={boardRef} role="grid" aria-label="10乘10方塊棋盤">
+        <div className="board" ref={boardRef} role="grid" aria-label="8乘8方塊棋盤">
           {board.map((row, r) => row.map((cell, c) => {
             const key = `${r}-${c}`;
             const isPreview = preview.has(key);
