@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 type Cell = number | null;
 type Point = { r: number; c: number };
@@ -73,22 +73,16 @@ export default function Home() {
   const [board, setBoard] = useState<Cell[][]>(() => emptyBoard());
   const [pieces, setPieces] = useState<Array<Piece | null>>(() => makeBatch());
   const [score, setScore] = useState(0);
-  const [best, setBest] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [hover, setHover] = useState<Point | null>(null);
-  const [drag, setDrag] = useState<{ index: number; x: number; y: number } | null>(null);
+  const [drag, setDrag] = useState<{ index: number; pointerId: number } | null>(null);
   const [undo, setUndo] = useState<Snapshot | null>(null);
   const [gameOver, setGameOver] = useState(false);
   const [sound, setSound] = useState(true);
   const [message, setMessage] = useState("選一個方塊，放進格子裡吧！");
   const [sparkles, setSparkles] = useState<string[]>([]);
   const audioRef = useRef<AudioContext | null>(null);
-
-  useEffect(() => {
-    const saved = Number(localStorage.getItem("block-garden-best") || 0);
-    const timer = window.setTimeout(() => setBest(saved), 0);
-    return () => window.clearTimeout(timer);
-  }, []);
+  const boardRef = useRef<HTMLDivElement | null>(null);
 
   const selectedPiece = selected === null ? null : pieces[selected];
   const preview = useMemo(() => {
@@ -130,10 +124,6 @@ export default function Home() {
     const nextScore = score + added + bonus;
     setBoard(nextBoard);
     setScore(nextScore);
-    if (nextScore > best) {
-      setBest(nextScore);
-      localStorage.setItem("block-garden-best", String(nextScore));
-    }
     if (cleared.size) {
       setSparkles([...cleared]);
       setMessage(completeRows.length + completeCols.length > 1 ? "太厲害了！一次消除好多排！" : "漂亮！完成一排！");
@@ -191,31 +181,43 @@ export default function Home() {
     setMessage("已經回到上一步囉！");
   }
 
-  function pointCell(x: number, y: number) {
-    const el = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-cell]");
-    if (!el) return null;
-    return { r: Number(el.dataset.row), c: Number(el.dataset.col) };
+  function pointCell(x: number, y: number, piece: Piece) {
+    const grid = boardRef.current;
+    if (!grid) return null;
+    const rect = grid.getBoundingClientRect();
+    const step = rect.width / SIZE;
+    const liftedY = y - step * 0.8;
+    if (x < rect.left || x > rect.right || liftedY < rect.top - step || liftedY > rect.bottom + step) return null;
+    const pieceRows = Math.max(...piece.cells.map((cell) => cell.r)) + 1;
+    const pieceCols = Math.max(...piece.cells.map((cell) => cell.c)) + 1;
+    return {
+      r: Math.round((liftedY - rect.top) / step - pieceRows / 2),
+      c: Math.round((x - rect.left) / step - pieceCols / 2),
+    };
   }
 
   function startDrag(index: number, event: React.PointerEvent) {
     if (!pieces[index] || gameOver) return;
     event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
     setSelected(index);
-    setDrag({ index, x: event.clientX, y: event.clientY });
-    setMessage("拖到想放的位置，再放開手指！");
+    setDrag({ index, pointerId: event.pointerId });
+    setMessage("拖到棋盤裡，亮起來的位置就是落點！");
   }
 
   function moveDrag(event: React.PointerEvent) {
     if (!drag) return;
     event.preventDefault();
-    setDrag({ ...drag, x: event.clientX, y: event.clientY });
-    setHover(pointCell(event.clientX, event.clientY));
+    const piece = pieces[drag.index];
+    if (piece) setHover(pointCell(event.clientX, event.clientY, piece));
   }
 
   function endDrag(event: React.PointerEvent) {
     if (!drag) return;
-    const cell = pointCell(event.clientX, event.clientY);
-    if (cell) place(drag.index, cell.r, cell.c);
+    const piece = pieces[drag.index];
+    const cell = piece ? pointCell(event.clientX, event.clientY, piece) : null;
+    if (cell && piece && canPlace(board, piece, cell.r, cell.c)) place(drag.index, cell.r, cell.c);
+    else if (cell) setMessage("這裡放不下，換個位置試試看！");
     setDrag(null);
     setHover(null);
   }
@@ -223,19 +225,17 @@ export default function Home() {
   return (
     <main className="game-shell" onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={() => setDrag(null)}>
       <header className="topbar">
-        <div className="brand"><span aria-hidden="true">▦</span><div><h1>方塊樂園</h1><p>動動腦，排整齊！</p></div></div>
-        <button className="sound-button" onClick={() => setSound(!sound)} aria-label={sound ? "關閉音效" : "開啟音效"}>{sound ? "🔊" : "🔇"}</button>
+        <div className="brand"><h1>方塊樂園</h1></div>
+        <div className="header-tools">
+          <div className="score-pill"><span>分數</span><strong>{score}</strong></div>
+          <button className="sound-button" onClick={() => setSound(!sound)} aria-label={sound ? "關閉音效" : "開啟音效"}>{sound ? "🔊" : "🔇"}</button>
+        </div>
       </header>
-
-      <section className="score-row" aria-label="分數">
-        <div className="score-card"><span>現在分數</span><strong>{score}</strong></div>
-        <div className="score-card best"><span>🏆 最高分</span><strong>{best}</strong></div>
-      </section>
 
       <p className="coach" aria-live="polite"><span aria-hidden="true">✨</span>{message}</p>
 
       <section className="board-wrap">
-        <div className="board" role="grid" aria-label="10乘10方塊棋盤">
+        <div className="board" ref={boardRef} role="grid" aria-label="10乘10方塊棋盤">
           {board.map((row, r) => row.map((cell, c) => {
             const key = `${r}-${c}`;
             const isPreview = preview.has(key);
@@ -266,7 +266,9 @@ export default function Home() {
               key={piece.id}
               className={`piece-button ${selected === index ? "selected" : ""} ${!pieceFits(board, piece) ? "disabled-piece" : ""}`}
               onPointerDown={(event) => startDrag(index, event)}
-              onClick={() => setSelected(index)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") setSelected(index);
+              }}
               aria-label={`選擇第${index + 1}個方塊`}
             ><PieceView piece={piece} /></button>
           ) : <div className="piece-button used" key={index}><span>✓</span></div>)}
@@ -279,10 +281,6 @@ export default function Home() {
       </div>
 
       <p className="tip"><b>小提示：</b>排滿橫線或直線，就能消除方塊！</p>
-
-      {drag && pieces[drag.index] && (
-        <div className="drag-piece" style={{ left: drag.x, top: drag.y }}><PieceView piece={pieces[drag.index]!} /></div>
-      )}
 
       {gameOver && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="game-over-title">
