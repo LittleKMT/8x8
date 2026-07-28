@@ -57,6 +57,22 @@ function pieceFits(board: Cell[][], piece: Piece) {
   return false;
 }
 
+function nearestValidCell(board: Cell[][], piece: Piece, target: Point) {
+  let nearest: Point | null = null;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (let r = 0; r < SIZE; r += 1) {
+    for (let c = 0; c < SIZE; c += 1) {
+      if (!canPlace(board, piece, r, c)) continue;
+      const distance = Math.abs(r - target.r) + Math.abs(c - target.c);
+      if (distance < nearestDistance) {
+        nearest = { r, c };
+        nearestDistance = distance;
+      }
+    }
+  }
+  return nearest;
+}
+
 function PieceView({ piece }: { piece: Piece }) {
   const rows = Math.max(...piece.cells.map((cell) => cell.r)) + 1;
   const cols = Math.max(...piece.cells.map((cell) => cell.c)) + 1;
@@ -202,14 +218,18 @@ export default function Home() {
     if (!drag) return;
     event.preventDefault();
     const piece = pieces[drag.index];
-    if (piece) setHover(pointCell(event.clientX, event.clientY, piece));
+    if (piece) {
+      const target = pointCell(event.clientX, event.clientY, piece);
+      setHover(target ? nearestValidCell(board, piece, target) : null);
+    }
   }
 
   function endDrag(event: React.PointerEvent) {
     if (!drag) return;
     const piece = pieces[drag.index];
-    const cell = piece ? pointCell(event.clientX, event.clientY, piece) : null;
-    if (cell && piece && canPlace(board, piece, cell.r, cell.c)) place(drag.index, cell.r, cell.c);
+    const target = piece ? pointCell(event.clientX, event.clientY, piece) : null;
+    const cell = piece && target ? nearestValidCell(board, piece, target) : null;
+    if (cell && piece) place(drag.index, cell.r, cell.c);
     setDrag(null);
     setHover(null);
   }
