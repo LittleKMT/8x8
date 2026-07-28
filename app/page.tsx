@@ -6,9 +6,20 @@ type Cell = number | null;
 type Point = { r: number; c: number };
 type Piece = { id: string; cells: Point[]; color: number };
 type Snapshot = { board: Cell[][]; pieces: Array<Piece | null>; score: number };
+type DragSession = {
+  index: number;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  moved: boolean;
+};
 
 const SIZE = 10;
 const HIGH_SCORE_KEY = "fangkuai-leyuan-high-score";
+const DRAG_START_DISTANCE = 3;
+const DRAG_LIFT_CELLS = 2.4;
+const DRAG_X_SENSITIVITY = 1.35;
+const DRAG_Y_SENSITIVITY = 1.18;
 const SHAPES: Point[][] = [
   [{ r: 0, c: 0 }],
   [{ r: 0, c: 0 }, { r: 0, c: 1 }],
@@ -99,6 +110,7 @@ export default function Home() {
   const [sparkles, setSparkles] = useState<string[]>([]);
   const audioRef = useRef<AudioContext | null>(null);
   const boardRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<DragSession | null>(null);
   const highScoreRef = useRef(0);
 
   useEffect(() => {
@@ -214,8 +226,8 @@ export default function Home() {
     if (!grid) return null;
     const rect = grid.getBoundingClientRect();
     const step = rect.width / SIZE;
-    const liftedY = y - step * 0.8;
-    const reach = step * 1.5;
+    const liftedY = y - Math.max(92, step * DRAG_LIFT_CELLS);
+    const reach = step * 3;
     if (x < rect.left - reach || x > rect.right + reach || liftedY < rect.top - reach || liftedY > rect.bottom + reach) return null;
     const pieceRows = Math.max(...piece.cells.map((cell) => cell.r)) + 1;
     const pieceCols = Math.max(...piece.cells.map((cell) => cell.c)) + 1;
@@ -231,32 +243,58 @@ export default function Home() {
     if (!pieces[index] || gameOver) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      index,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+    };
     setSelected(index);
     setDrag({ index, pointerId: event.pointerId });
   }
 
   function moveDrag(event: React.PointerEvent) {
-    if (!drag) return;
+    const session = dragRef.current;
+    if (!session || session.pointerId !== event.pointerId) return;
     event.preventDefault();
-    const piece = pieces[drag.index];
+    const deltaX = event.clientX - session.startX;
+    const deltaY = event.clientY - session.startY;
+    if (!session.moved && Math.hypot(deltaX, deltaY) < DRAG_START_DISTANCE) return;
+    session.moved = true;
+    const piece = pieces[session.index];
     if (piece) {
-      const target = pointCell(event.clientX, event.clientY, piece);
+      const sensitiveX = session.startX + deltaX * DRAG_X_SENSITIVITY;
+      const sensitiveY = session.startY + deltaY * DRAG_Y_SENSITIVITY;
+      const target = pointCell(sensitiveX, sensitiveY, piece);
       setHover(target ? nearestValidCell(board, piece, target) : null);
     }
   }
 
   function endDrag(event: React.PointerEvent) {
-    if (!drag) return;
-    const piece = pieces[drag.index];
-    const target = piece ? pointCell(event.clientX, event.clientY, piece) : null;
+    const session = dragRef.current;
+    if (!session || session.pointerId !== event.pointerId) return;
+    const piece = pieces[session.index];
+    const deltaX = event.clientX - session.startX;
+    const deltaY = event.clientY - session.startY;
+    const sensitiveX = session.startX + deltaX * DRAG_X_SENSITIVITY;
+    const sensitiveY = session.startY + deltaY * DRAG_Y_SENSITIVITY;
+    const target = session.moved && piece ? pointCell(sensitiveX, sensitiveY, piece) : null;
     const cell = piece && target ? nearestValidCell(board, piece, target) : null;
-    if (cell && piece) place(drag.index, cell.r, cell.c);
+    if (cell && piece) place(session.index, cell.r, cell.c);
+    dragRef.current = null;
+    setDrag(null);
+    setHover(null);
+  }
+
+  function cancelDrag() {
+    dragRef.current = null;
     setDrag(null);
     setHover(null);
   }
 
   return (
-    <main className="game-shell" onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={() => setDrag(null)}>
+    <main className="game-shell" onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={cancelDrag}>
       <header className="topbar">
         <div className="brand"><h1>方塊樂園</h1></div>
         <div className="header-tools">
