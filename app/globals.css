@@ -70,15 +70,17 @@ button { font: inherit; }
   background: var(--cell); box-shadow: inset 0 2px 2px rgba(255,255,255,.1), inset 0 -2px 2px rgba(0,0,0,.2); cursor: pointer;
   transition: background .12s ease, opacity .12s ease;
 }
-.cell.filled, .cell.preview { box-shadow: inset 0 4px 3px rgba(255,255,255,.42), inset 0 -4px 3px rgba(5,10,30,.25), 0 0 8px currentColor; }
+.cell.filled { box-shadow: inset 0 4px 3px rgba(255,255,255,.42), inset 0 -4px 3px rgba(5,10,30,.25), 0 0 8px currentColor; }
 .cell.preview {
-  opacity: .94;
+  opacity: 1;
   transform: none;
+  background: #45516a;
   outline: 2px solid #ffe36a;
   outline-offset: -2px;
-  box-shadow: inset 0 0 0 2px #ffcb20, inset 0 4px 3px rgba(255,255,255,.45), 0 0 13px #ffc400;
+  box-shadow: inset 0 0 0 2px #ffcb20, 0 0 13px #ffc400;
+  animation: targetPulse .7s ease-in-out infinite alternate;
 }
-.cell.preview.invalid { background: #f26d75; opacity: .5; }
+.cell.preview.invalid { background: #693948; outline-color: #ff7b82; box-shadow: inset 0 0 0 2px #ff6670, 0 0 11px #ff5562; }
 .cell.sparkle { animation: pop .42s ease both; background: #ffe577; }
 
 .color-0 { background: #ff3f68 !important; color: #ff3f68; }
@@ -97,6 +99,10 @@ button { font: inherit; }
 }
 .piece-button:hover, .piece-button.selected { transform: translateY(-4px); border-color: #ffe04b; background: #24385d; box-shadow: 0 0 18px rgba(255,224,75,.22); }
 .piece-button:active { cursor: grabbing; transform: scale(.96); }
+.piece-button.dragging, .piece-button.dragging:hover, .piece-button.dragging:active {
+  transform: none; border-color: transparent; background: rgba(25,39,68,.94); box-shadow: 0 6px 16px rgba(0,0,0,.28);
+}
+.piece-button.dragging .mini-block { animation: none; opacity: 1; transform: none; }
 .piece-button.disabled-piece { opacity: .35; filter: grayscale(.4); }
 .piece-button.used { color: #71819f; font-size: 26px; box-shadow: none; background: rgba(23,35,59,.6); }
 .mini-grid { display: grid; gap: 4px; width: fit-content; height: fit-content; }
@@ -121,6 +127,10 @@ button { font: inherit; }
 .game-modal button { width: 100%; background: #58bf91; box-shadow-color: #37956e; }
 
 @keyframes pop { 50% { transform: scale(1.28) rotate(4deg); } 100% { transform: scale(0); opacity: 0; } }
+@keyframes targetPulse {
+  from { outline-color: #fff0a2; box-shadow: inset 0 0 0 2px #ffd83d, 0 0 7px rgba(255,196,0,.65); }
+  to { outline-color: #ffe04b; box-shadow: inset 0 0 0 2px #ffb800, 0 0 17px rgba(255,196,0,1); }
+}
 @keyframes modalIn { from { opacity: 0; transform: translateY(20px) scale(.92); } }
 
 @media (max-width: 700px) {

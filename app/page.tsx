@@ -317,7 +317,7 @@ export default function Home() {
                 data-row={r}
                 data-col={c}
                 aria-label={`第${r + 1}列第${c + 1}格`}
-                className={`cell ${cell !== null ? `filled color-${cell}` : ""} ${isPreview ? (previewValid ? `preview color-${selectedPiece?.color}` : "preview invalid") : ""} ${sparkles.includes(key) ? "sparkle" : ""}`}
+                className={`cell ${cell !== null ? `filled color-${cell}` : ""} ${isPreview ? (previewValid ? "preview" : "preview invalid") : ""} ${sparkles.includes(key) ? "sparkle" : ""}`}
                 onPointerEnter={() => selectedPiece && !drag && setHover({ r, c })}
                 onFocus={() => selectedPiece && setHover({ r, c })}
                 onClick={() => selected !== null && place(selected, r, c)}
@@ -332,7 +332,7 @@ export default function Home() {
           {pieces.map((piece, index) => piece ? (
             <button
               key={piece.id}
-              className={`piece-button ${selected === index ? "selected" : ""} ${!pieceFits(board, piece) ? "disabled-piece" : ""}`}
+              className={`piece-button ${selected === index ? "selected" : ""} ${drag?.index === index ? "dragging" : ""} ${!pieceFits(board, piece) ? "disabled-piece" : ""}`}
               onPointerDown={(event) => startDrag(index, event)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") setSelected(index);
