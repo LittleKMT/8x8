@@ -79,7 +79,6 @@ export default function Home() {
   const [undo, setUndo] = useState<Snapshot | null>(null);
   const [gameOver, setGameOver] = useState(false);
   const [sound, setSound] = useState(true);
-  const [message, setMessage] = useState("選一個方塊，放進格子裡吧！");
   const [sparkles, setSparkles] = useState<string[]>([]);
   const audioRef = useRef<AudioContext | null>(null);
   const boardRef = useRef<HTMLDivElement | null>(null);
@@ -126,11 +125,9 @@ export default function Home() {
     setScore(nextScore);
     if (cleared.size) {
       setSparkles([...cleared]);
-      setMessage(completeRows.length + completeCols.length > 1 ? "太厲害了！一次消除好多排！" : "漂亮！完成一排！");
       tone("clear");
       window.setTimeout(() => setSparkles([]), 450);
     } else {
-      setMessage("放得好！再選一個吧！");
       tone("place");
     }
 
@@ -140,16 +137,12 @@ export default function Home() {
     const playable = finalPieces.some((piece) => piece && pieceFits(nextBoard, piece));
     if (!playable) {
       setGameOver(true);
-      setMessage("好棒！看看你得到幾分！");
     }
   }
 
   function place(index: number, row: number, col: number) {
     const piece = pieces[index];
-    if (!piece || !canPlace(board, piece, row, col)) {
-      setMessage("這裡放不下，換個位置試試看！");
-      return;
-    }
+    if (!piece || !canPlace(board, piece, row, col)) return;
     setUndo({ board: cloneBoard(board), pieces: pieces.map((item) => item ? { ...item } : null), score });
     const nextBoard = cloneBoard(board);
     piece.cells.forEach(({ r, c }) => { nextBoard[row + r][col + c] = piece.color; });
@@ -168,7 +161,6 @@ export default function Home() {
     setHover(null);
     setUndo(null);
     setGameOver(false);
-    setMessage("新的挑戰開始囉！");
   }
 
   function undoMove() {
@@ -178,7 +170,6 @@ export default function Home() {
     setScore(undo.score);
     setUndo(null);
     setSelected(null);
-    setMessage("已經回到上一步囉！");
   }
 
   function pointCell(x: number, y: number, piece: Piece) {
@@ -187,12 +178,15 @@ export default function Home() {
     const rect = grid.getBoundingClientRect();
     const step = rect.width / SIZE;
     const liftedY = y - step * 0.8;
-    if (x < rect.left || x > rect.right || liftedY < rect.top - step || liftedY > rect.bottom + step) return null;
+    const reach = step * 1.5;
+    if (x < rect.left - reach || x > rect.right + reach || liftedY < rect.top - reach || liftedY > rect.bottom + reach) return null;
     const pieceRows = Math.max(...piece.cells.map((cell) => cell.r)) + 1;
     const pieceCols = Math.max(...piece.cells.map((cell) => cell.c)) + 1;
+    const rawRow = Math.round((liftedY - rect.top) / step - pieceRows / 2);
+    const rawCol = Math.round((x - rect.left) / step - pieceCols / 2);
     return {
-      r: Math.round((liftedY - rect.top) / step - pieceRows / 2),
-      c: Math.round((x - rect.left) / step - pieceCols / 2),
+      r: Math.max(0, Math.min(SIZE - pieceRows, rawRow)),
+      c: Math.max(0, Math.min(SIZE - pieceCols, rawCol)),
     };
   }
 
@@ -202,7 +196,6 @@ export default function Home() {
     event.currentTarget.setPointerCapture(event.pointerId);
     setSelected(index);
     setDrag({ index, pointerId: event.pointerId });
-    setMessage("拖到棋盤裡，亮起來的位置就是落點！");
   }
 
   function moveDrag(event: React.PointerEvent) {
@@ -217,7 +210,6 @@ export default function Home() {
     const piece = pieces[drag.index];
     const cell = piece ? pointCell(event.clientX, event.clientY, piece) : null;
     if (cell && piece && canPlace(board, piece, cell.r, cell.c)) place(drag.index, cell.r, cell.c);
-    else if (cell) setMessage("這裡放不下，換個位置試試看！");
     setDrag(null);
     setHover(null);
   }
@@ -231,8 +223,6 @@ export default function Home() {
           <button className="sound-button" onClick={() => setSound(!sound)} aria-label={sound ? "關閉音效" : "開啟音效"}>{sound ? "🔊" : "🔇"}</button>
         </div>
       </header>
-
-      <p className="coach" aria-live="polite"><span aria-hidden="true">✨</span>{message}</p>
 
       <section className="board-wrap">
         <div className="board" ref={boardRef} role="grid" aria-label="10乘10方塊棋盤">
@@ -259,7 +249,6 @@ export default function Home() {
       </section>
 
       <section className="tray" aria-label="可選擇的方塊">
-        <h2>選一個方塊</h2>
         <div className="piece-row">
           {pieces.map((piece, index) => piece ? (
             <button
@@ -279,8 +268,6 @@ export default function Home() {
         <button onClick={undoMove} disabled={!undo || gameOver}>↶ 回上一步</button>
         <button onClick={restart}>↻ 重新開始</button>
       </div>
-
-      <p className="tip"><b>小提示：</b>排滿橫線或直線，就能消除方塊！</p>
 
       {gameOver && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="game-over-title">
