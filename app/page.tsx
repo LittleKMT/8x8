@@ -12,14 +12,15 @@ type DragSession = {
   startX: number;
   startY: number;
   moved: boolean;
+  cellSize: number;
+  gap: number;
 };
+type DragVisual = { index: number; pointerId: number; x: number; y: number; cellSize: number; gap: number };
 
 const SIZE = 10;
 const HIGH_SCORE_KEY = "fangkuai-leyuan-high-score";
 const DRAG_START_DISTANCE = 3;
 const DRAG_LIFT_CELLS = 2.4;
-const DRAG_X_SENSITIVITY = 1.35;
-const DRAG_Y_SENSITIVITY = 1.18;
 const SHAPES: Point[][] = [
   [{ r: 0, c: 0 }],
   [{ r: 0, c: 0 }, { r: 0, c: 1 }],
@@ -103,13 +104,14 @@ export default function Home() {
   const [score, setScore] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [hover, setHover] = useState<Point | null>(null);
-  const [drag, setDrag] = useState<{ index: number; pointerId: number } | null>(null);
+  const [drag, setDrag] = useState<DragVisual | null>(null);
   const [undo, setUndo] = useState<Snapshot | null>(null);
   const [gameOver, setGameOver] = useState(false);
   const [sound, setSound] = useState(true);
   const [sparkles, setSparkles] = useState<string[]>([]);
   const audioRef = useRef<AudioContext | null>(null);
   const boardRef = useRef<HTMLDivElement | null>(null);
+  const floatingPieceRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragSession | null>(null);
   const highScoreRef = useRef(0);
 
@@ -133,6 +135,7 @@ export default function Home() {
   }, [score]);
 
   const selectedPiece = selected === null ? null : pieces[selected];
+  const draggingPiece = drag === null ? null : pieces[drag.index];
   const preview = useMemo(() => {
     if (!selectedPiece || !hover) return new Set<string>();
     return new Set(selectedPiece.cells.map(({ r, c }) => `${hover.r + r}-${hover.c + c}`));
@@ -239,19 +242,30 @@ export default function Home() {
     };
   }
 
+  function floatingTransform(x: number, y: number, cellSize: number) {
+    const liftedY = y - Math.max(92, cellSize * DRAG_LIFT_CELLS);
+    return `translate3d(${x}px, ${liftedY}px, 0) translate(-50%, -50%)`;
+  }
+
   function startDrag(index: number, event: React.PointerEvent) {
     if (!pieces[index] || gameOver) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
+    const grid = boardRef.current;
+    const gridWidth = grid?.getBoundingClientRect().width ?? 400;
+    const gap = grid ? Number.parseFloat(window.getComputedStyle(grid).columnGap) || 0 : 4;
+    const cellSize = (gridWidth - gap * (SIZE - 1)) / SIZE;
     dragRef.current = {
       index,
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
       moved: false,
+      cellSize,
+      gap,
     };
     setSelected(index);
-    setDrag({ index, pointerId: event.pointerId });
+    setDrag({ index, pointerId: event.pointerId, x: event.clientX, y: event.clientY, cellSize, gap });
   }
 
   function moveDrag(event: React.PointerEvent) {
@@ -260,14 +274,16 @@ export default function Home() {
     event.preventDefault();
     const deltaX = event.clientX - session.startX;
     const deltaY = event.clientY - session.startY;
+    if (floatingPieceRef.current) {
+      floatingPieceRef.current.style.transform = floatingTransform(event.clientX, event.clientY, session.cellSize);
+    }
     if (!session.moved && Math.hypot(deltaX, deltaY) < DRAG_START_DISTANCE) return;
     session.moved = true;
     const piece = pieces[session.index];
     if (piece) {
-      const sensitiveX = session.startX + deltaX * DRAG_X_SENSITIVITY;
-      const sensitiveY = session.startY + deltaY * DRAG_Y_SENSITIVITY;
-      const target = pointCell(sensitiveX, sensitiveY, piece);
-      setHover(target ? nearestValidCell(board, piece, target) : null);
+      const target = pointCell(event.clientX, event.clientY, piece);
+      const nextHover = target ? nearestValidCell(board, piece, target) : null;
+      setHover((current) => current?.r === nextHover?.r && current?.c === nextHover?.c ? current : nextHover);
     }
   }
 
@@ -275,11 +291,7 @@ export default function Home() {
     const session = dragRef.current;
     if (!session || session.pointerId !== event.pointerId) return;
     const piece = pieces[session.index];
-    const deltaX = event.clientX - session.startX;
-    const deltaY = event.clientY - session.startY;
-    const sensitiveX = session.startX + deltaX * DRAG_X_SENSITIVITY;
-    const sensitiveY = session.startY + deltaY * DRAG_Y_SENSITIVITY;
-    const target = session.moved && piece ? pointCell(sensitiveX, sensitiveY, piece) : null;
+    const target = session.moved && piece ? pointCell(event.clientX, event.clientY, piece) : null;
     const cell = piece && target ? nearestValidCell(board, piece, target) : null;
     if (cell && piece) place(session.index, cell.r, cell.c);
     dragRef.current = null;
@@ -317,7 +329,7 @@ export default function Home() {
                 data-row={r}
                 data-col={c}
                 aria-label={`第${r + 1}列第${c + 1}格`}
-                className={`cell ${cell !== null ? `filled color-${cell}` : ""} ${isPreview ? (previewValid ? `preview color-${selectedPiece?.color}` : "preview invalid") : ""} ${sparkles.includes(key) ? "sparkle" : ""}`}
+                className={`cell ${cell !== null ? `filled color-${cell}` : ""} ${isPreview ? (previewValid ? "preview" : "preview invalid") : ""} ${sparkles.includes(key) ? "sparkle" : ""}`}
                 onPointerEnter={() => selectedPiece && !drag && setHover({ r, c })}
                 onFocus={() => selectedPiece && setHover({ r, c })}
                 onClick={() => selected !== null && place(selected, r, c)}
@@ -326,6 +338,21 @@ export default function Home() {
           }))}
         </div>
       </section>
+
+      {drag && draggingPiece && (
+        <div
+          ref={floatingPieceRef}
+          className="floating-piece"
+          aria-hidden="true"
+          style={{
+            "--drag-cell": `${drag.cellSize}px`,
+            "--drag-gap": `${drag.gap}px`,
+            transform: floatingTransform(drag.x, drag.y, drag.cellSize),
+          } as React.CSSProperties}
+        >
+          <PieceView piece={draggingPiece} />
+        </div>
+      )}
 
       <section className="tray" aria-label="可選擇的方塊">
         <div className="piece-row">
