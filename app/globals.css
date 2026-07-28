@@ -66,21 +66,26 @@ button { font: inherit; }
 }
 .cell {
   width: 100%; height: 100%; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 0;
-  align-self: stretch; justify-self: stretch; transform: none;
+  position: relative; align-self: stretch; justify-self: stretch; transform: none;
   background: var(--cell); box-shadow: inset 0 2px 2px rgba(255,255,255,.1), inset 0 -2px 2px rgba(0,0,0,.2); cursor: pointer;
-  transition: background .12s ease, opacity .12s ease;
+  transition: none;
 }
 .cell.filled { box-shadow: inset 0 4px 3px rgba(255,255,255,.42), inset 0 -4px 3px rgba(5,10,30,.25), 0 0 8px currentColor; }
 .cell.preview {
   opacity: 1;
   transform: none;
-  background: #45516a;
+  background: #45516a !important;
   outline: 2px solid #ffe36a;
   outline-offset: -2px;
-  box-shadow: inset 0 0 0 2px #ffcb20, 0 0 13px #ffc400;
-  animation: targetPulse .7s ease-in-out infinite alternate;
+  box-shadow: inset 0 0 0 2px #ffcb20, 0 0 11px rgba(255,196,0,.8);
+  animation: none;
 }
-.cell.preview.invalid { background: #693948; outline-color: #ff7b82; box-shadow: inset 0 0 0 2px #ff6670, 0 0 11px #ff5562; }
+.cell.preview::after {
+  content: ""; position: absolute; z-index: 1; inset: 2px; pointer-events: none;
+  background: currentColor; outline: 1px solid rgba(255,255,255,.78); outline-offset: -1px;
+  box-shadow: inset 0 3px 2px rgba(255,255,255,.4), inset 0 -3px 2px rgba(5,10,30,.22), 0 0 7px currentColor;
+}
+.cell.preview.invalid { color: #f26d75; background: #693948 !important; outline-color: #ff7b82; box-shadow: inset 0 0 0 2px #ff6670, 0 0 11px #ff5562; }
 .cell.sparkle { animation: pop .42s ease both; background: #ffe577; }
 
 .color-0 { background: #ff3f68 !important; color: #ff3f68; }
@@ -127,10 +132,6 @@ button { font: inherit; }
 .game-modal button { width: 100%; background: #58bf91; box-shadow-color: #37956e; }
 
 @keyframes pop { 50% { transform: scale(1.28) rotate(4deg); } 100% { transform: scale(0); opacity: 0; } }
-@keyframes targetPulse {
-  from { outline-color: #fff0a2; box-shadow: inset 0 0 0 2px #ffd83d, 0 0 7px rgba(255,196,0,.65); }
-  to { outline-color: #ffe04b; box-shadow: inset 0 0 0 2px #ffb800, 0 0 17px rgba(255,196,0,1); }
-}
 @keyframes modalIn { from { opacity: 0; transform: translateY(20px) scale(.92); } }
 
 @media (max-width: 700px) {

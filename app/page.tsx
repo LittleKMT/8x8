@@ -317,7 +317,7 @@ export default function Home() {
                 data-row={r}
                 data-col={c}
                 aria-label={`第${r + 1}列第${c + 1}格`}
-                className={`cell ${cell !== null ? `filled color-${cell}` : ""} ${isPreview ? (previewValid ? "preview" : "preview invalid") : ""} ${sparkles.includes(key) ? "sparkle" : ""}`}
+                className={`cell ${cell !== null ? `filled color-${cell}` : ""} ${isPreview ? (previewValid ? `preview color-${selectedPiece?.color}` : "preview invalid") : ""} ${sparkles.includes(key) ? "sparkle" : ""}`}
                 onPointerEnter={() => selectedPiece && !drag && setHover({ r, c })}
                 onFocus={() => selectedPiece && setHover({ r, c })}
                 onClick={() => selected !== null && place(selected, r, c)}
