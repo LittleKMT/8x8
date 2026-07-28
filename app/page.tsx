@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Cell = number | null;
 type Point = { r: number; c: number };
@@ -8,6 +8,7 @@ type Piece = { id: string; cells: Point[]; color: number };
 type Snapshot = { board: Cell[][]; pieces: Array<Piece | null>; score: number };
 
 const SIZE = 10;
+const HIGH_SCORE_KEY = "fangkuai-leyuan-high-score";
 const SHAPES: Point[][] = [
   [{ r: 0, c: 0 }],
   [{ r: 0, c: 0 }, { r: 0, c: 1 }],
@@ -98,6 +99,26 @@ export default function Home() {
   const [sparkles, setSparkles] = useState<string[]>([]);
   const audioRef = useRef<AudioContext | null>(null);
   const boardRef = useRef<HTMLDivElement | null>(null);
+  const highScoreRef = useRef(0);
+
+  useEffect(() => {
+    try {
+      const saved = Number(window.localStorage.getItem(HIGH_SCORE_KEY));
+      if (Number.isFinite(saved) && saved > 0) highScoreRef.current = Math.floor(saved);
+    } catch {
+      // The game still works when browser storage is unavailable.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (score <= highScoreRef.current) return;
+    highScoreRef.current = score;
+    try {
+      window.localStorage.setItem(HIGH_SCORE_KEY, String(score));
+    } catch {
+      // The game still works when browser storage is unavailable.
+    }
+  }, [score]);
 
   const selectedPiece = selected === null ? null : pieces[selected];
   const preview = useMemo(() => {
