@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { HIGH_SCORE_KEY, readHighScore, saveHighScore } from "./high-score";
 
 type Cell = number | null;
 type Point = { r: number; c: number };
@@ -19,7 +20,7 @@ type DragVisual = { index: number; pointerId: number; x: number; y: number; cell
 
 const SIZE = 8;
 const PALETTE_SIZE = 3;
-const HIGH_SCORE_KEY = "fangkuai-leyuan-high-score";
+const HIGH_SCORE_EVENT = "fangkuai-leyuan-high-score-change";
 const DRAG_START_DISTANCE = 3;
 const DRAG_LIFT_CELLS = 2.4;
 const SHAPES: Point[][] = [
@@ -47,6 +48,27 @@ const SHAPES: Point[][] = [
 
 const emptyBoard = (): Cell[][] => Array.from({ length: SIZE }, () => Array<Cell>(SIZE).fill(null));
 const cloneBoard = (board: Cell[][]) => board.map((row) => [...row]);
+
+function getHighScoreSnapshot() {
+  if (typeof window === "undefined") return 0;
+  try {
+    return readHighScore(window.localStorage);
+  } catch {
+    return 0;
+  }
+}
+
+function subscribeHighScore(onChange: () => void) {
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === HIGH_SCORE_KEY) onChange();
+  };
+  window.addEventListener("storage", handleStorage);
+  window.addEventListener(HIGH_SCORE_EVENT, onChange);
+  return () => {
+    window.removeEventListener("storage", handleStorage);
+    window.removeEventListener(HIGH_SCORE_EVENT, onChange);
+  };
+}
 
 function makeBatch(): Piece[] {
   return Array.from({ length: 3 }, (_, index) => ({
@@ -119,30 +141,35 @@ export default function Home() {
   const [undo, setUndo] = useState<Snapshot | null>(null);
   const [sound, setSound] = useState(true);
   const [sparkles, setSparkles] = useState<string[]>([]);
+  const highScore = useSyncExternalStore(subscribeHighScore, getHighScoreSnapshot, () => 0);
   const audioRef = useRef<AudioContext | null>(null);
   const boardRef = useRef<HTMLDivElement | null>(null);
   const floatingPieceRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragSession | null>(null);
-  const highScoreRef = useRef(0);
-
   useEffect(() => {
+    if (score <= highScore) return;
     try {
-      const saved = Number(window.localStorage.getItem(HIGH_SCORE_KEY));
-      if (Number.isFinite(saved) && saved > 0) highScoreRef.current = Math.floor(saved);
+      saveHighScore(window.localStorage, score);
+      window.dispatchEvent(new Event(HIGH_SCORE_EVENT));
     } catch {
       // The game still works when browser storage is unavailable.
     }
+  }, [score, highScore]);
+
+  useEffect(() => {
+    const resetRestoredGame = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      setBoard(emptyBoard());
+      setPieces(makeBatch());
+      setScore(0);
+      setSelected(null);
+      setHover(null);
+      setDrag(null);
+      setUndo(null);
+    };
+    window.addEventListener("pageshow", resetRestoredGame);
+    return () => window.removeEventListener("pageshow", resetRestoredGame);
   }, []);
-
-  useEffect(() => {
-    if (score <= highScoreRef.current) return;
-    highScoreRef.current = score;
-    try {
-      window.localStorage.setItem(HIGH_SCORE_KEY, String(score));
-    } catch {
-      // The game still works when browser storage is unavailable.
-    }
-  }, [score]);
 
   const selectedPiece = selected === null ? null : pieces[selected];
   const draggingPiece = drag === null ? null : pieces[drag.index];
@@ -318,6 +345,7 @@ export default function Home() {
         <div className="brand"><h1>方塊樂園</h1></div>
         <div className="header-tools">
           <div className="score-pill"><span>分數</span><strong>{score}</strong></div>
+          <div className="score-pill best-score"><span>最高</span><strong>{highScore}</strong></div>
           <button className="sound-button" onClick={() => setSound(!sound)} aria-label={sound ? "關閉音效" : "開啟音效"}>{sound ? "🔊" : "🔇"}</button>
         </div>
       </header>
