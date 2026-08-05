@@ -8,11 +8,13 @@ const moduleUrl = `data:text/javascript;base64,${Buffer.from(stripTypeScriptType
 const { buildChart, gradeHit, pointsForGrade } = await import(moduleUrl);
 
 test("chart fills four lanes with ordered notes inside the song", () => {
-  const chart = buildChart(60);
+  const chart = buildChart(60, 150, 0);
   assert.ok(chart.length > 100);
   assert.deepEqual([...new Set(chart.map((note) => note.lane))].sort(), [0, 1, 2, 3]);
   assert.ok(chart.every((note) => note.time >= 1.6 && note.time < 59));
   assert.ok(chart.every((note, index) => index === 0 || note.time >= chart[index - 1].time));
+  assert.ok(chart.filter((note) => note.hold).length >= 4);
+  assert.ok(chart.filter((note) => note.hold).every((note) => note.hold >= 1.2));
 });
 
 test("timing grades and combo points are predictable", () => {
@@ -20,5 +22,6 @@ test("timing grades and combo points are predictable", () => {
   assert.equal(gradeHit(-0.2), "good");
   assert.equal(gradeHit(0.3), "miss");
   assert.equal(pointsForGrade("perfect", 10), 120);
+  assert.equal(pointsForGrade("perfect", 10, true), 260);
   assert.equal(pointsForGrade("miss", 10), 0);
 });

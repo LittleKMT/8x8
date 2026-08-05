@@ -18,7 +18,16 @@
   border-radius: 10px; background: rgba(6, 11, 48, .55); box-shadow: 0 0 12px rgba(41, 181, 255, .2);
 }
 .best { color: #ffe65c; }
-.titleBlock { margin: 8px 0 6px; text-align: center; }
+.songPicker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 7px 0; }
+.songPicker button {
+  min-width: 0; min-height: 43px; padding: 5px 4px; overflow: hidden; color: #aebeea; border: 1px solid #3d5193;
+  border-radius: 8px; background: rgba(13, 20, 67, .85); font-size: 10px; font-weight: 900; cursor: pointer;
+}
+.songPicker strong { display: inline-grid; place-items: center; width: 19px; height: 19px; margin-right: 4px; color: #fff; border-radius: 50%; background: #354ca1; }
+.songPicker span { display: inline; white-space: nowrap; }
+.songPicker .songSelected { color: #fff; border-color: #fff46c; background: linear-gradient(135deg, #174fb6, #8033b8); box-shadow: 0 0 12px rgba(255, 233, 83, .45); }
+.songPicker .songSelected strong { color: #211436; background: #fff46c; }
+.titleBlock { margin: 5px 0 4px; text-align: center; }
 .titleBlock p { margin: 0; color: #55ddff; font-size: 12px; font-weight: 1000; letter-spacing: .24em; }
 .titleBlock h1 { margin: 3px 0; font-size: clamp(22px, 6vw, 31px); text-shadow: 0 0 12px #a044ff; }
 .titleBlock span { color: #bac9ff; font-size: 12px; font-weight: 800; }
@@ -28,7 +37,7 @@
 .scoreRow strong { font-size: 25px; text-shadow: 0 0 14px #42cfff; }
 
 .stage {
-  position: relative; width: 100%; height: min(58dvh, 590px); min-height: 380px; border: 3px solid #52baff;
+  position: relative; width: 100%; height: min(52dvh, 540px); min-height: 350px; border: 3px solid #52baff;
   background: linear-gradient(180deg, rgba(10, 21, 94, .96), rgba(11, 8, 50, .98));
   box-shadow: inset 0 0 28px rgba(28, 133, 255, .32), 0 0 20px rgba(52, 170, 255, .65);
 }
@@ -44,11 +53,24 @@
   position: absolute; z-index: 3; width: 20%; height: 24px; border: 2px solid #fff; border-radius: 4px;
   transform: perspective(180px) rotateX(4deg); will-change: top; pointer-events: none;
 }
+.holdNote {
+  height: calc(24px + var(--hold-length));
+  border-radius: 8px 8px 4px 4px;
+  transform: translateY(calc(-100% + 24px));
+  background-image: linear-gradient(90deg, rgba(255,255,255,.12), rgba(255,255,255,.58), rgba(255,255,255,.12)) !important;
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,.25), 0 0 18px currentColor;
+}
+.holdNote::after {
+  content: ""; position: absolute; left: -2px; right: -2px; bottom: -2px; height: 22px;
+  border: 2px solid #fff; border-radius: 5px; background: inherit; box-shadow: 0 0 12px #fff;
+}
+.activeHold { filter: brightness(1.35); animation: holdPulse .35s ease-in-out infinite alternate; }
 .judgeLine { position: absolute; z-index: 4; left: 0; right: 0; top: 88%; height: 5px; background: #fff; box-shadow: 0 0 8px #fff, 0 0 20px #38cfff; }
 .grade { position: absolute; z-index: 6; top: 69%; left: 50%; transform: translateX(-50%); font-weight: 1000; font-size: 24px; font-style: italic; text-shadow: 0 0 12px currentColor; }
 .perfect { color: #fff56c; }
 .good { color: #50eaff; }
 .miss { color: #ff6b9c; }
+.hold { color: #fff; letter-spacing: .12em; }
 .overlay { position: absolute; z-index: 10; inset: 0; display: grid; place-items: center; background: rgba(3, 5, 32, .54); backdrop-filter: blur(2px); }
 .startButton, .results button {
   min-width: 178px; min-height: 58px; border: 2px solid #fff; border-radius: 14px; color: #fff; font-size: 20px; font-weight: 1000;
@@ -63,7 +85,7 @@
 .controls button {
   min-height: 62px; padding: 0; color: #fff; border: 3px solid #fff; border-radius: 8px;
   background: color-mix(in srgb, var(--lane-color) 70%, #101447); box-shadow: 0 0 13px var(--lane-color), inset 0 3px 4px rgba(255,255,255,.4);
-  font-size: 18px; font-weight: 1000; touch-action: manipulation;
+  font-size: 18px; font-weight: 1000; touch-action: none; -webkit-touch-callout: none;
 }
 .controls button:active { transform: translateY(3px) scale(.96); filter: brightness(1.35); }
 .bottomActions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 11px; }
@@ -71,10 +93,16 @@
 .bottomActions button:disabled { opacity: .35; }
 
 @keyframes laneFlash { 0% { opacity: .9; } 100% { opacity: 0; } }
+@keyframes holdPulse { from { filter: brightness(1.12); } to { filter: brightness(1.55); } }
 
 @media (max-height: 740px) {
   .titleBlock { margin: 2px 0; }
   .titleBlock span { display: none; }
-  .stage { height: 52dvh; min-height: 330px; }
+  .stage { height: 45dvh; min-height: 305px; }
   .controls button { min-height: 54px; }
+}
+
+@media (max-width: 420px) {
+  .songPicker span { display: block; overflow: hidden; text-overflow: ellipsis; }
+  .songPicker strong { margin: 0 auto 2px; }
 }

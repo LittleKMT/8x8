@@ -5,19 +5,31 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { buildChart, gradeHit, pointsForGrade, type HitGrade, type RhythmNote } from "./chart";
 import styles from "./rhythm.module.css";
 
-const AUDIO_PATH = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/audio/yoru-wo-tsukinukero.mp3`;
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const APPROACH_SECONDS = 1.8;
 const MISS_AFTER_SECONDS = 0.25;
-const STORAGE_KEY = "fangkuai-leyuan-rhythm-high-score";
+const STORAGE_PREFIX = "fangkuai-leyuan-rhythm-high-score";
 const LANE_COLORS = ["#28c7ff", "#8e5cff", "#ff3fb5", "#ffd23f"];
 const LANE_KEYS = ["D", "F", "J", "K"];
 
+const SONGS = [
+  { id: "yoru", title: "夜を突き抜けろ", label: "日文電子搖滾", bpm: 150, file: "yoru-wo-tsukinukero.mp3", duration: 221.08 },
+  { id: "pulse", title: "Zero Gravity Pulse", label: "日文 Cyber Rock", bpm: 165, file: "zero-gravity-pulse.mp3", duration: 220 },
+  { id: "crown", title: "Electric Crown", label: "英文 Electro Pop Rock", bpm: 140, file: "electric-crown.mp3", duration: 220 },
+] as const;
+
 type Status = "ready" | "playing" | "paused" | "finished";
 type ResultCounts = Record<HitGrade, number>;
+type ActiveHold = { note: RhythmNote; grade: HitGrade };
+type Feedback = HitGrade | "hold" | null;
 
-function readBest() {
+function scoreKey(songId: string) {
+  return `${STORAGE_PREFIX}-${songId}`;
+}
+
+function readBest(songId: string) {
   if (typeof window === "undefined") return 0;
-  const value = Number.parseInt(window.localStorage.getItem(STORAGE_KEY) ?? "0", 10);
+  const value = Number.parseInt(window.localStorage.getItem(scoreKey(songId)) ?? "0", 10);
   return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
@@ -29,31 +41,69 @@ export default function RhythmGame() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const frameRef = useRef<number | null>(null);
   const judgedRef = useRef(new Set<number>());
+  const pressedLanesRef = useRef(new Set<number>());
+  const activeHoldsRef = useRef(new Map<number, ActiveHold>());
   const comboRef = useRef(0);
   const scoreRef = useRef(0);
-  const [duration, setDuration] = useState(221.08);
+  const [songIndex, setSongIndex] = useState(0);
+  const song = SONGS[songIndex];
+  const [duration, setDuration] = useState<number>(song.duration);
   const [currentTime, setCurrentTime] = useState(0);
   const [status, setStatus] = useState<Status>("ready");
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
-  const storedBest = useSyncExternalStore(subscribeBest, readBest, () => 0);
+  const getStoredBest = useCallback(() => readBest(song.id), [song.id]);
+  const storedBest = useSyncExternalStore(subscribeBest, getStoredBest, () => 0);
   const [sessionBest, setSessionBest] = useState(0);
   const best = Math.max(storedBest, sessionBest);
-  const [lastGrade, setLastGrade] = useState<HitGrade | null>(null);
+  const [feedback, setFeedback] = useState<Feedback>(null);
   const [counts, setCounts] = useState<ResultCounts>({ perfect: 0, good: 0, miss: 0 });
   const [laneFlash, setLaneFlash] = useState<number | null>(null);
   const [judgedIds, setJudgedIds] = useState<Set<number>>(() => new Set());
-  const chart = useMemo(() => buildChart(duration), [duration]);
+  const [activeHoldIds, setActiveHoldIds] = useState<Set<number>>(() => new Set());
+  const chart = useMemo(() => buildChart(duration, song.bpm, songIndex), [duration, song.bpm, songIndex]);
+
+  const recordGrade = useCallback((note: RhythmNote, grade: HitGrade, isHold = false) => {
+    if (judgedRef.current.has(note.id)) return;
+    judgedRef.current.add(note.id);
+    setJudgedIds(new Set(judgedRef.current));
+    setFeedback(grade);
+
+    if (grade === "miss") {
+      comboRef.current = 0;
+      setCombo(0);
+      setCounts((value) => ({ ...value, miss: value.miss + 1 }));
+      return;
+    }
+
+    const nextCombo = comboRef.current + 1;
+    scoreRef.current += pointsForGrade(grade, nextCombo, isHold);
+    comboRef.current = nextCombo;
+    setCombo(nextCombo);
+    setScore(scoreRef.current);
+    setCounts((value) => ({ ...value, [grade]: value[grade] + 1 }));
+  }, []);
+
+  const finishHold = useCallback((lane: number, success: boolean) => {
+    const active = activeHoldsRef.current.get(lane);
+    if (!active) return;
+    activeHoldsRef.current.delete(lane);
+    setActiveHoldIds(new Set([...activeHoldsRef.current.values()].map((value) => value.note.id)));
+    recordGrade(active.note, success ? active.grade : "miss", true);
+  }, [recordGrade]);
 
   const finishSong = useCallback(() => {
     setStatus("finished");
     setCombo(0);
     comboRef.current = 0;
+    pressedLanesRef.current.clear();
+    activeHoldsRef.current.clear();
+    setActiveHoldIds(new Set());
     const finalScore = scoreRef.current;
-    const next = Math.max(readBest(), finalScore);
-    try { window.localStorage.setItem(STORAGE_KEY, String(next)); } catch { /* storage can be unavailable */ }
+    const next = Math.max(readBest(song.id), finalScore);
+    try { window.localStorage.setItem(scoreKey(song.id), String(next)); } catch { /* storage can be unavailable */ }
     setSessionBest(next);
-  }, []);
+  }, [song.id]);
 
   useEffect(() => {
     if (status !== "playing") return;
@@ -64,43 +114,50 @@ export default function RhythmGame() {
       const now = audio.currentTime;
       setCurrentTime(now);
 
-      let missed = 0;
-      for (const note of chart) {
-        if (note.time >= now - MISS_AFTER_SECONDS) break;
-        if (!judgedRef.current.has(note.id)) {
-          judgedRef.current.add(note.id);
-          missed += 1;
-        }
-      }
-      if (missed) {
-        setJudgedIds(new Set(judgedRef.current));
-        comboRef.current = 0;
-        setCombo(0);
-        setCounts((value) => ({ ...value, miss: value.miss + missed }));
-        setLastGrade("miss");
+      for (const [lane, active] of activeHoldsRef.current) {
+        const endTime = active.note.time + (active.note.hold ?? 0);
+        if (now >= endTime - 0.05 && pressedLanesRef.current.has(lane)) finishHold(lane, true);
       }
 
-      if (!audio.ended && status === "playing") frameRef.current = requestAnimationFrame(tick);
+      const activeIds = new Set([...activeHoldsRef.current.values()].map((value) => value.note.id));
+      const missed: RhythmNote[] = [];
+      for (const note of chart) {
+        if (note.time >= now - MISS_AFTER_SECONDS) break;
+        if (!judgedRef.current.has(note.id) && !activeIds.has(note.id)) missed.push(note);
+      }
+      missed.forEach((note) => recordGrade(note, "miss"));
+
+      if (!audio.ended) frameRef.current = requestAnimationFrame(tick);
     };
 
     frameRef.current = requestAnimationFrame(tick);
     return () => { if (frameRef.current !== null) cancelAnimationFrame(frameRef.current); };
-  }, [chart, status]);
+  }, [chart, finishHold, recordGrade, status]);
 
   const resetGame = useCallback(() => {
     const audio = audioRef.current;
     if (audio) { audio.pause(); audio.currentTime = 0; }
     judgedRef.current = new Set();
+    pressedLanesRef.current.clear();
+    activeHoldsRef.current.clear();
     setJudgedIds(new Set());
+    setActiveHoldIds(new Set());
     comboRef.current = 0;
     scoreRef.current = 0;
     setCurrentTime(0);
     setScore(0);
     setCombo(0);
     setCounts({ perfect: 0, good: 0, miss: 0 });
-    setLastGrade(null);
+    setFeedback(null);
     setStatus("ready");
   }, []);
+
+  const chooseSong = useCallback((index: number) => {
+    resetGame();
+    setSongIndex(index);
+    setDuration(SONGS[index].duration);
+    setSessionBest(0);
+  }, [resetGame]);
 
   const start = useCallback(async () => {
     const audio = audioRef.current;
@@ -117,17 +174,24 @@ export default function RhythmGame() {
   const togglePause = useCallback(async () => {
     const audio = audioRef.current;
     if (!audio) return;
-    if (status === "playing") { audio.pause(); setStatus("paused"); }
-    else if (status === "paused") { await audio.play(); setStatus("playing"); }
-  }, [status]);
+    if (status === "playing") {
+      audio.pause();
+      for (const lane of activeHoldsRef.current.keys()) finishHold(lane, false);
+      pressedLanesRef.current.clear();
+      setStatus("paused");
+    } else if (status === "paused") {
+      await audio.play();
+      setStatus("playing");
+    }
+  }, [finishHold, status]);
 
-  const hitLane = useCallback((lane: number) => {
-    if (status !== "playing") return;
+  const pressLane = useCallback((lane: number) => {
+    if (status !== "playing" || pressedLanesRef.current.has(lane)) return;
     const audio = audioRef.current;
     if (!audio) return;
+    pressedLanesRef.current.add(lane);
     const now = audio.currentTime;
     setLaneFlash(lane);
-    window.setTimeout(() => setLaneFlash((value) => value === lane ? null : value), 90);
 
     let target: RhythmNote | null = null;
     let closest = Number.POSITIVE_INFINITY;
@@ -139,41 +203,58 @@ export default function RhythmGame() {
     }
     if (!target || closest > 0.22) return;
 
-    judgedRef.current.add(target.id);
-    setJudgedIds(new Set(judgedRef.current));
     const grade = gradeHit(target.time - now);
-    const nextCombo = comboRef.current + 1;
-    const gained = pointsForGrade(grade, nextCombo);
-    comboRef.current = nextCombo;
-    scoreRef.current += gained;
-    setCombo(nextCombo);
-    setScore(scoreRef.current);
-    setCounts((value) => ({ ...value, [grade]: value[grade] + 1 }));
-    setLastGrade(grade);
-  }, [chart, status]);
+    if (target.hold) {
+      activeHoldsRef.current.set(lane, { note: target, grade });
+      setActiveHoldIds(new Set([...activeHoldsRef.current.values()].map((value) => value.note.id)));
+      setFeedback("hold");
+    } else {
+      recordGrade(target, grade);
+    }
+  }, [chart, recordGrade, status]);
+
+  const releaseLane = useCallback((lane: number) => {
+    pressedLanesRef.current.delete(lane);
+    setLaneFlash((value) => value === lane ? null : value);
+    const active = activeHoldsRef.current.get(lane);
+    const audio = audioRef.current;
+    if (!active || !audio) return;
+    const endTime = active.note.time + (active.note.hold ?? 0);
+    finishHold(lane, audio.currentTime >= endTime - 0.18);
+  }, [finishHold]);
 
   useEffect(() => {
-    const handleKey = (event: KeyboardEvent) => {
-      const index = LANE_KEYS.indexOf(event.key.toUpperCase());
-      if (index >= 0 && !event.repeat) hitLane(index);
+    const handleDown = (event: KeyboardEvent) => {
+      const lane = LANE_KEYS.indexOf(event.key.toUpperCase());
+      if (lane >= 0 && !event.repeat) { event.preventDefault(); pressLane(lane); }
     };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [hitLane]);
+    const handleUp = (event: KeyboardEvent) => {
+      const lane = LANE_KEYS.indexOf(event.key.toUpperCase());
+      if (lane >= 0) { event.preventDefault(); releaseLane(lane); }
+    };
+    window.addEventListener("keydown", handleDown);
+    window.addEventListener("keyup", handleUp);
+    return () => {
+      window.removeEventListener("keydown", handleDown);
+      window.removeEventListener("keyup", handleUp);
+    };
+  }, [pressLane, releaseLane]);
 
   const visibleNotes = chart.filter((note) => {
     if (judgedIds.has(note.id)) return false;
     const until = note.time - currentTime;
-    return until <= APPROACH_SECONDS + 0.15 && until >= -MISS_AFTER_SECONDS;
+    const holdEnd = note.time + (note.hold ?? 0);
+    return until <= APPROACH_SECONDS + 0.15 && holdEnd >= currentTime - MISS_AFTER_SECONDS;
   });
 
   return (
     <main className={styles.shell}>
       <audio
+        key={song.id}
         ref={audioRef}
-        src={AUDIO_PATH}
+        src={`${BASE_PATH}/audio/${song.file}`}
         preload="auto"
-        onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || 221.08)}
+        onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || song.duration)}
         onEnded={finishSong}
       />
 
@@ -182,10 +263,18 @@ export default function RhythmGame() {
         <div className={styles.best}>🏆 {best}</div>
       </header>
 
+      <section className={styles.songPicker} aria-label="選擇歌曲">
+        {SONGS.map((item, index) => (
+          <button key={item.id} onClick={() => chooseSong(index)} className={songIndex === index ? styles.songSelected : ""}>
+            <strong>{index + 1}</strong><span>{item.title}</span>
+          </button>
+        ))}
+      </section>
+
       <section className={styles.titleBlock}>
         <p>NEON BEAT</p>
-        <h1>夜を突き抜けろ</h1>
-        <span>原創日文電子搖滾 · 150 BPM</span>
+        <h1>{song.title}</h1>
+        <span>{song.label} · {song.bpm} BPM · ◆ 長條請按住</span>
       </section>
 
       <section className={styles.scoreRow} aria-label="遊戲分數">
@@ -199,23 +288,28 @@ export default function RhythmGame() {
             <div key={color} className={`${styles.lane} ${laneFlash === lane ? styles.laneHit : ""}`} />
           ))}
           {visibleNotes.map((note) => {
+            const isActive = activeHoldIds.has(note.id);
             const progress = 1 - (note.time - currentTime) / APPROACH_SECONDS;
+            const top = isActive ? 87 : Math.max(-8, Math.min(87, progress * 87));
+            const remainingHold = note.hold ? Math.max(0, note.time + note.hold - Math.max(currentTime, note.time)) : 0;
+            const holdLength = Math.min(80, remainingHold / APPROACH_SECONDS * 87);
             return (
               <div
                 key={note.id}
-                className={styles.note}
+                className={`${styles.note} ${note.hold ? styles.holdNote : ""} ${isActive ? styles.activeHold : ""}`}
                 style={{
                   left: `${note.lane * 25 + 2.5}%`,
-                  top: `${Math.max(-8, Math.min(87, progress * 87))}%`,
+                  top: `${top}%`,
                   background: LANE_COLORS[note.lane],
                   boxShadow: `0 0 18px ${LANE_COLORS[note.lane]}`,
-                }}
+                  "--hold-length": `${holdLength}%`,
+                } as React.CSSProperties}
               />
             );
           })}
           <div className={styles.judgeLine} />
-          {lastGrade && status === "playing" && (
-            <div className={`${styles.grade} ${styles[lastGrade]}`}>{lastGrade.toUpperCase()}</div>
+          {feedback && status === "playing" && (
+            <div className={`${styles.grade} ${styles[feedback]}`}>{feedback === "hold" ? "HOLD" : feedback.toUpperCase()}</div>
           )}
         </div>
 
@@ -241,9 +335,11 @@ export default function RhythmGame() {
         {LANE_COLORS.map((color, lane) => (
           <button
             key={color}
-            onPointerDown={(event) => { event.preventDefault(); hitLane(lane); }}
+            onPointerDown={(event) => { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); pressLane(lane); }}
+            onPointerUp={() => releaseLane(lane)}
+            onPointerCancel={() => releaseLane(lane)}
             style={{ "--lane-color": color } as React.CSSProperties}
-            aria-label={`第 ${lane + 1} 軌`}
+            aria-label={`第 ${lane + 1} 軌，短音點一下，長音按住`}
           >
             <span>{LANE_KEYS[lane]}</span>
           </button>
