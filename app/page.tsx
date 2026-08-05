@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
 import { HIGH_SCORE_KEY, readHighScore, saveHighScore } from "./high-score";
 
 type Cell = number | null;
@@ -409,6 +410,7 @@ export default function Home() {
         <button onClick={undoMove} disabled={!undo}>↶ 回上一步</button>
         <button onClick={restart}>↻ 重新開始</button>
       </div>
+      <Link href="/rhythm" className="rhythm-entry">🎵 玩節奏遊戲</Link>
     </main>
   );
 }

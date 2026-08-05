@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
   trailingSlash: true,
   basePath: isGitHubPages ? "/8x8" : "",
   assetPrefix: isGitHubPages ? "/8x8/" : undefined,
+  env: {
+    NEXT_PUBLIC_BASE_PATH: isGitHubPages ? "/8x8" : "",
+  },
 };
 
 export default nextConfig;

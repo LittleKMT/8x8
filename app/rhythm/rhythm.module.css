@@ -1,0 +1,80 @@
+.shell {
+  width: min(100%, 560px);
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: 14px 14px 28px;
+  color: #fff;
+  background:
+    radial-gradient(circle at 18% 24%, rgba(40, 199, 255, .23), transparent 28%),
+    radial-gradient(circle at 82% 32%, rgba(255, 63, 181, .2), transparent 30%),
+    linear-gradient(180deg, #141a69 0%, #090b3a 50%, #08051c 100%);
+  overflow: hidden;
+  touch-action: manipulation;
+}
+
+.header { display: flex; align-items: center; justify-content: space-between; min-height: 38px; }
+.back, .best {
+  color: #fff; text-decoration: none; font-weight: 900; padding: 8px 11px; border: 1px solid rgba(115, 216, 255, .5);
+  border-radius: 10px; background: rgba(6, 11, 48, .55); box-shadow: 0 0 12px rgba(41, 181, 255, .2);
+}
+.best { color: #ffe65c; }
+.titleBlock { margin: 8px 0 6px; text-align: center; }
+.titleBlock p { margin: 0; color: #55ddff; font-size: 12px; font-weight: 1000; letter-spacing: .24em; }
+.titleBlock h1 { margin: 3px 0; font-size: clamp(22px, 6vw, 31px); text-shadow: 0 0 12px #a044ff; }
+.titleBlock span { color: #bac9ff; font-size: 12px; font-weight: 800; }
+.scoreRow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px 0; }
+.scoreRow div { display: flex; align-items: baseline; justify-content: center; gap: 10px; }
+.scoreRow span { color: #74e5ff; font-size: 11px; font-weight: 1000; letter-spacing: .12em; }
+.scoreRow strong { font-size: 25px; text-shadow: 0 0 14px #42cfff; }
+
+.stage {
+  position: relative; width: 100%; height: min(58dvh, 590px); min-height: 380px; border: 3px solid #52baff;
+  background: linear-gradient(180deg, rgba(10, 21, 94, .96), rgba(11, 8, 50, .98));
+  box-shadow: inset 0 0 28px rgba(28, 133, 255, .32), 0 0 20px rgba(52, 170, 255, .65);
+}
+.lanes { position: absolute; inset: 0; overflow: hidden; }
+.lane { position: absolute; top: 0; bottom: 0; width: 25%; border-right: 1px solid rgba(112, 190, 255, .28); }
+.lane:nth-child(1) { left: 0; }
+.lane:nth-child(2) { left: 25%; }
+.lane:nth-child(3) { left: 50%; }
+.lane:nth-child(4) { left: 75%; border-right: 0; }
+.lane::after { content: ""; position: absolute; inset: 0; opacity: 0; background: linear-gradient(180deg, transparent, rgba(255,255,255,.32)); }
+.laneHit::after { animation: laneFlash .12s ease-out; }
+.note {
+  position: absolute; z-index: 3; width: 20%; height: 24px; border: 2px solid #fff; border-radius: 4px;
+  transform: perspective(180px) rotateX(4deg); will-change: top; pointer-events: none;
+}
+.judgeLine { position: absolute; z-index: 4; left: 0; right: 0; top: 88%; height: 5px; background: #fff; box-shadow: 0 0 8px #fff, 0 0 20px #38cfff; }
+.grade { position: absolute; z-index: 6; top: 69%; left: 50%; transform: translateX(-50%); font-weight: 1000; font-size: 24px; font-style: italic; text-shadow: 0 0 12px currentColor; }
+.perfect { color: #fff56c; }
+.good { color: #50eaff; }
+.miss { color: #ff6b9c; }
+.overlay { position: absolute; z-index: 10; inset: 0; display: grid; place-items: center; background: rgba(3, 5, 32, .54); backdrop-filter: blur(2px); }
+.startButton, .results button {
+  min-width: 178px; min-height: 58px; border: 2px solid #fff; border-radius: 14px; color: #fff; font-size: 20px; font-weight: 1000;
+  background: linear-gradient(135deg, #147fff, #a33dff 55%, #ff3fbd); box-shadow: 0 0 24px rgba(112, 82, 255, .8); cursor: pointer;
+}
+.results { text-align: center; padding: 24px; }
+.results h2 { margin: 0 0 5px; }
+.results > strong { display: block; color: #fff36a; font-size: 46px; text-shadow: 0 0 18px #ff9e2c; }
+.results p { color: #c9d6ff; font-size: 12px; font-weight: 900; }
+
+.controls { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-top: 10px; }
+.controls button {
+  min-height: 62px; padding: 0; color: #fff; border: 3px solid #fff; border-radius: 8px;
+  background: color-mix(in srgb, var(--lane-color) 70%, #101447); box-shadow: 0 0 13px var(--lane-color), inset 0 3px 4px rgba(255,255,255,.4);
+  font-size: 18px; font-weight: 1000; touch-action: manipulation;
+}
+.controls button:active { transform: translateY(3px) scale(.96); filter: brightness(1.35); }
+.bottomActions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 11px; }
+.bottomActions button { min-height: 44px; border: 1px solid #667ac2; border-radius: 10px; color: #fff; background: #20285a; font-weight: 900; }
+.bottomActions button:disabled { opacity: .35; }
+
+@keyframes laneFlash { 0% { opacity: .9; } 100% { opacity: 0; } }
+
+@media (max-height: 740px) {
+  .titleBlock { margin: 2px 0; }
+  .titleBlock span { display: none; }
+  .stage { height: 52dvh; min-height: 330px; }
+  .controls button { min-height: 54px; }
+}
