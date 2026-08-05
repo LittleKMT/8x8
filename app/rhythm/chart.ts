@@ -1,4 +1,4 @@
-export type NoteKind = "tap" | "hold" | "flick-left" | "flick-right";
+export type NoteKind = "tap" | "hold" | "slide" | "flick-left" | "flick-right";
 
 export type RhythmNote = {
   id: number;
@@ -6,6 +6,7 @@ export type RhythmNote = {
   time: number;
   kind: NoteKind;
   hold?: number;
+  endLane?: number;
 };
 
 export type HitGrade = "perfect" | "good" | "miss";
@@ -19,7 +20,57 @@ const MOTIFS = [
   [2, 3, 0, 1],
 ];
 
+export const FIRST_SONG_BEAT_OFFSET = 0.294;
+
+function buildFirstSongChart(duration: number, bpm: number): RhythmNote[] {
+  const notes: RhythmNote[] = [];
+  const beatLength = 60 / bpm;
+  const motifs = [[0, 1, 2, 3], [3, 2, 1, 0], [0, 2, 3, 1], [1, 0, 2, 3]];
+  let id = 0;
+  let bar = 0;
+
+  while (FIRST_SONG_BEAT_OFFSET + (4 + bar * 4) * beatLength < duration - 1.5) {
+    const barBeat = 4 + bar * 4;
+    const motif = motifs[bar % motifs.length];
+    const isSlideBar = bar >= 4 && bar % 6 === 4;
+    const lively = bar >= 10 && bar % 8 >= 5;
+    const offsets = lively ? [0, 0.5, 1.5, 2, 3] : [0, 1, 2, 3];
+
+    offsets.forEach((offset, index) => {
+      const time = Number((FIRST_SONG_BEAT_OFFSET + (barBeat + offset) * beatLength).toFixed(3));
+      if (time >= duration - 1.2) return;
+
+      if (isSlideBar && index === 0) {
+        const lane = motif[0];
+        const direction = lane < 2 ? 1 : -1;
+        const holdBeats = [2, 2.5, 3][Math.floor(bar / 6) % 3];
+        notes.push({
+          id: id++, lane, time, kind: "slide",
+          hold: Number((holdBeats * beatLength).toFixed(3)),
+          endLane: Math.max(0, Math.min(3, lane + direction)),
+        });
+        return;
+      }
+
+      let lane = motif[index % motif.length];
+      if (isSlideBar) lane = motif[0] < 2 ? 3 - index % 2 : index % 2;
+      const flick = bar >= 8 && index === offsets.length - 1 && bar % 4 === 2;
+      const kind: NoteKind = flick ? (lane < 2 ? "flick-left" : "flick-right") : "tap";
+      notes.push({ id: id++, lane, time, kind });
+
+      if (bar >= 14 && bar % 8 === 7 && index === 0) {
+        notes.push({ id: id++, lane: (lane + 2) % 4, time, kind: "tap" });
+      }
+    });
+
+    bar += 1;
+  }
+
+  return notes.sort((a, b) => a.time - b.time || a.lane - b.lane);
+}
+
 export function buildChart(duration: number, bpm = 150, variant = 0): RhythmNote[] {
+  if (variant === 0) return buildFirstSongChart(duration, bpm);
   const notes: RhythmNote[] = [];
   const beatLength = 60 / bpm;
   const firstBeat = 4;
