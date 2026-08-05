@@ -14,19 +14,32 @@ export function buildChart(duration: number, bpm = 150, variant = 0): RhythmNote
   const beatLength = 60 / bpm;
   const end = Math.max(4, duration - 1.2);
   let id = 0;
+  let beat = 4;
+  let event = 0;
 
-  for (let beat = 4; beat * beatLength < end; beat += 1) {
-    const measureBeat = beat % 8;
-    if (measureBeat === 6) continue;
+  while (beat * beatLength < end) {
     const time = Number((beat * beatLength).toFixed(3));
-    const lane = LANE_PATTERN[(beat + variant * 3) % LANE_PATTERN.length];
-    const isHold = beat > 12 && (beat + variant * 5) % 24 === 0;
-    const hold = isHold ? Number((beatLength * (variant % 2 === 0 ? 4 : 3)).toFixed(3)) : undefined;
-    notes.push({ id: id++, lane, time, ...(hold ? { hold } : {}) });
+    const lane = LANE_PATTERN[(event + variant * 2) % LANE_PATTERN.length];
+    const early = time < 20;
+    const middle = time >= 20 && time < 55;
+    const isHold = !early && event % 8 === 5;
+    const holdBeats = 2 + ((event + variant) % 4);
 
-    if (!hold && (measureBeat === 3 || (beat > 40 && measureBeat === 7))) {
-      notes.push({ id: id++, lane: (lane + 2) % 4, time });
+    if (early) {
+      const pair = event % 2 === 0 ? [0, 1] : [2, 3];
+      pair.forEach((pairLane) => notes.push({ id: id++, lane: pairLane, time }));
+    } else if (isHold) {
+      notes.push({ id: id++, lane, time, hold: Number((beatLength * holdBeats).toFixed(3)) });
+      if (!middle && event % 24 === 21) {
+        notes.push({ id: id++, lane: (lane + 2) % 4, time, hold: Number((beatLength * (holdBeats - 1)).toFixed(3)) });
+      }
+    } else {
+      notes.push({ id: id++, lane, time });
+      if (!middle && event % 5 === 3) notes.push({ id: id++, lane: (lane + 1) % 4, time });
     }
+
+    beat += early ? 4 : middle ? 3 : 2;
+    event += 1;
   }
 
   return notes;

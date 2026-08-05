@@ -20,7 +20,7 @@ const SONGS = [
 
 type Status = "ready" | "playing" | "paused" | "finished";
 type ResultCounts = Record<HitGrade, number>;
-type ActiveHold = { note: RhythmNote; grade: HitGrade };
+type ActiveHold = { note: RhythmNote; grade: HitGrade; startedAt: number };
 type Feedback = HitGrade | "hold" | null;
 
 function scoreKey(songId: string) {
@@ -61,6 +61,7 @@ export default function RhythmGame() {
   const [laneFlash, setLaneFlash] = useState<number | null>(null);
   const [judgedIds, setJudgedIds] = useState<Set<number>>(() => new Set());
   const [activeHoldIds, setActiveHoldIds] = useState<Set<number>>(() => new Set());
+  const [activeHoldStarts, setActiveHoldStarts] = useState<Map<number, number>>(() => new Map());
   const chart = useMemo(() => buildChart(duration, song.bpm, songIndex), [duration, song.bpm, songIndex]);
 
   const recordGrade = useCallback((note: RhythmNote, grade: HitGrade, isHold = false) => {
@@ -88,7 +89,10 @@ export default function RhythmGame() {
     const active = activeHoldsRef.current.get(lane);
     if (!active) return;
     activeHoldsRef.current.delete(lane);
+    pressedLanesRef.current.delete(lane);
+    setLaneFlash((value) => value === lane ? null : value);
     setActiveHoldIds(new Set([...activeHoldsRef.current.values()].map((value) => value.note.id)));
+    setActiveHoldStarts(new Map([...activeHoldsRef.current.values()].map((value) => [value.note.id, value.startedAt])));
     recordGrade(active.note, success ? active.grade : "miss", true);
   }, [recordGrade]);
 
@@ -99,6 +103,7 @@ export default function RhythmGame() {
     pressedLanesRef.current.clear();
     activeHoldsRef.current.clear();
     setActiveHoldIds(new Set());
+    setActiveHoldStarts(new Map());
     const finalScore = scoreRef.current;
     const next = Math.max(readBest(song.id), finalScore);
     try { window.localStorage.setItem(scoreKey(song.id), String(next)); } catch { /* storage can be unavailable */ }
@@ -115,7 +120,7 @@ export default function RhythmGame() {
       setCurrentTime(now);
 
       for (const [lane, active] of activeHoldsRef.current) {
-        const endTime = active.note.time + (active.note.hold ?? 0);
+        const endTime = active.startedAt + (active.note.hold ?? 0);
         if (now >= endTime - 0.05 && pressedLanesRef.current.has(lane)) finishHold(lane, true);
       }
 
@@ -142,6 +147,7 @@ export default function RhythmGame() {
     activeHoldsRef.current.clear();
     setJudgedIds(new Set());
     setActiveHoldIds(new Set());
+    setActiveHoldStarts(new Map());
     comboRef.current = 0;
     scoreRef.current = 0;
     setCurrentTime(0);
@@ -205,8 +211,9 @@ export default function RhythmGame() {
 
     const grade = gradeHit(target.time - now);
     if (target.hold) {
-      activeHoldsRef.current.set(lane, { note: target, grade });
+      activeHoldsRef.current.set(lane, { note: target, grade, startedAt: now });
       setActiveHoldIds(new Set([...activeHoldsRef.current.values()].map((value) => value.note.id)));
+      setActiveHoldStarts(new Map([...activeHoldsRef.current.values()].map((value) => [value.note.id, value.startedAt])));
       setFeedback("hold");
     } else {
       recordGrade(target, grade);
@@ -219,9 +226,30 @@ export default function RhythmGame() {
     const active = activeHoldsRef.current.get(lane);
     const audio = audioRef.current;
     if (!active || !audio) return;
-    const endTime = active.note.time + (active.note.hold ?? 0);
+    const endTime = active.startedAt + (active.note.hold ?? 0);
     finishHold(lane, audio.currentTime >= endTime - 0.18);
   }, [finishHold]);
+
+  const pressNote = useCallback((note: RhythmNote) => {
+    if (status !== "playing" || judgedRef.current.has(note.id)) return;
+    const audio = audioRef.current;
+    if (!audio || activeHoldsRef.current.has(note.lane)) return;
+    pressedLanesRef.current.add(note.lane);
+    setLaneFlash(note.lane);
+
+    if (note.hold) {
+      activeHoldsRef.current.set(note.lane, { note, grade: "perfect", startedAt: audio.currentTime });
+      setActiveHoldIds(new Set([...activeHoldsRef.current.values()].map((value) => value.note.id)));
+      setActiveHoldStarts(new Map([...activeHoldsRef.current.values()].map((value) => [value.note.id, value.startedAt])));
+      setFeedback("hold");
+    } else {
+      recordGrade(note, "perfect");
+    }
+  }, [recordGrade, status]);
+
+  const releaseNote = useCallback((note: RhythmNote) => {
+    releaseLane(note.lane);
+  }, [releaseLane]);
 
   useEffect(() => {
     const handleDown = (event: KeyboardEvent) => {
@@ -274,7 +302,7 @@ export default function RhythmGame() {
       <section className={styles.titleBlock}>
         <p>NEON BEAT</p>
         <h1>{song.title}</h1>
-        <span>{song.label} · {song.bpm} BPM · ◆ 長條請按住</span>
+        <span>{song.label} · {song.bpm} BPM · 直接點光球，長條請按住</span>
       </section>
 
       <section className={styles.scoreRow} aria-label="遊戲分數">
@@ -290,17 +318,38 @@ export default function RhythmGame() {
           {visibleNotes.map((note) => {
             const isActive = activeHoldIds.has(note.id);
             const progress = 1 - (note.time - currentTime) / APPROACH_SECONDS;
-            const top = isActive ? 87 : Math.max(-8, Math.min(87, progress * 87));
-            const remainingHold = note.hold ? Math.max(0, note.time + note.hold - Math.max(currentTime, note.time)) : 0;
+            const top = Math.max(-8, Math.min(87, progress * 87));
+            const activeStart = activeHoldStarts.get(note.id);
+            const remainingHold = note.hold
+              ? Math.max(0, activeStart === undefined ? note.hold : note.hold - (currentTime - activeStart))
+              : 0;
             const holdLength = Math.min(80, remainingHold / APPROACH_SECONDS * 87);
             return (
               <div
                 key={note.id}
+                role="button"
+                tabIndex={0}
+                aria-label={note.hold ? `第 ${note.lane + 1} 軌長按音符` : `第 ${note.lane + 1} 軌點擊音符`}
                 className={`${styles.note} ${note.hold ? styles.holdNote : ""} ${isActive ? styles.activeHold : ""}`}
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                  pressNote(note);
+                }}
+                onPointerUp={() => releaseNote(note)}
+                onPointerCancel={() => releaseNote(note)}
+                onKeyDown={(event) => {
+                  if ((event.key === "Enter" || event.key === " ") && !event.repeat) pressNote(note);
+                }}
+                onKeyUp={(event) => {
+                  if (event.key === "Enter" || event.key === " ") releaseNote(note);
+                }}
                 style={{
-                  left: `${note.lane * 25 + 2.5}%`,
+                  left: `${note.lane * 25 + 12.5}%`,
                   top: `${top}%`,
                   background: LANE_COLORS[note.lane],
+                  color: LANE_COLORS[note.lane],
                   boxShadow: `0 0 18px ${LANE_COLORS[note.lane]}`,
                   "--hold-length": `${holdLength}%`,
                 } as React.CSSProperties}
@@ -329,21 +378,6 @@ export default function RhythmGame() {
             )}
           </div>
         )}
-      </section>
-
-      <section className={styles.controls} aria-label="節奏按鍵">
-        {LANE_COLORS.map((color, lane) => (
-          <button
-            key={color}
-            onPointerDown={(event) => { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); pressLane(lane); }}
-            onPointerUp={() => releaseLane(lane)}
-            onPointerCancel={() => releaseLane(lane)}
-            style={{ "--lane-color": color } as React.CSSProperties}
-            aria-label={`第 ${lane + 1} 軌，短音點一下，長音按住`}
-          >
-            <span>{LANE_KEYS[lane]}</span>
-          </button>
-        ))}
       </section>
 
       <div className={styles.bottomActions}>

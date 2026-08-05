@@ -9,12 +9,21 @@ const { buildChart, gradeHit, pointsForGrade } = await import(moduleUrl);
 
 test("chart fills four lanes with ordered notes inside the song", () => {
   const chart = buildChart(60, 150, 0);
-  assert.ok(chart.length > 100);
+  assert.ok(chart.length > 45 && chart.length < 90);
   assert.deepEqual([...new Set(chart.map((note) => note.lane))].sort(), [0, 1, 2, 3]);
   assert.ok(chart.every((note) => note.time >= 1.6 && note.time < 59));
   assert.ok(chart.every((note, index) => index === 0 || note.time >= chart[index - 1].time));
-  assert.ok(chart.filter((note) => note.hold).length >= 4);
-  assert.ok(chart.filter((note) => note.hold).every((note) => note.hold >= 1.2));
+  assert.ok(chart.filter((note) => note.hold).length >= 3);
+  assert.ok(chart.filter((note) => note.hold).every((note) => note.hold >= 0.8));
+
+  const groups = Map.groupBy(chart, (note) => note.time);
+  assert.ok([...groups.values()].every((notes) => notes.length <= 2));
+  for (const notes of [...groups.values()].filter((notes) => notes[0].time < 20)) {
+    assert.ok(
+      JSON.stringify(notes.map((note) => note.lane)) === JSON.stringify([0, 1]) ||
+      JSON.stringify(notes.map((note) => note.lane)) === JSON.stringify([2, 3]),
+    );
+  }
 });
 
 test("timing grades and combo points are predictable", () => {
